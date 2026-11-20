@@ -1,0 +1,59 @@
+// Q01: Retrohunt de IPs de IoC en logs de identidad y nube
+// MITRE ATT&CK: T1078.004, T1528
+// Fuente IoC: Microsoft Threat Intelligence (5 nov 2026). Revisa caducidad/TTL antes de reutilizar.
+// Nota: 199.19.77.18 corresponde a un nodo de salida de Tor (usar para triage, no alerta crítica aislada).
+
+let lookback = 30d;
+let IoC_IPs = dynamic(["199.19.77.84", "199.19.77.18", "65.87.223.26", "157.22.126.128"]);
+union isfuzzy=true
+    (AADServicePrincipalSignInLogs
+    | where TimeGenerated >= ago(lookback) and IPAddress in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "SPN sign-in",
+        IP = IPAddress,
+        Actor = ServicePrincipalName,
+        Detail = strcat("ResultType=", ResultType, ", resource=", ResourceDisplayName)),
+    (SigninLogs
+    | where TimeGenerated >= ago(lookback) and IPAddress in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "User sign-in",
+        IP = IPAddress,
+        Actor = UserPrincipalName,
+        Detail = strcat("ResultType=", ResultType, ", app=", AppDisplayName)),
+    (AADNonInteractiveUserSignInLogs
+    | where TimeGenerated >= ago(lookback) and IPAddress in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "Non-interactive sign-in",
+        IP = IPAddress,
+        Actor = UserPrincipalName,
+        Detail = strcat("ResultType=", ResultType, ", app=", AppDisplayName)),
+    (AzureActivity
+    | where TimeGenerated >= ago(lookback) and CallerIpAddress in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "Azure Activity",
+        IP = CallerIpAddress,
+        Actor = Caller,
+        Detail = strcat(OperationNameValue, ", ", ActivityStatusValue)),
+    (OfficeActivity
+    | where TimeGenerated >= ago(lookback) and ClientIP in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "Office 365",
+        IP = ClientIP,
+        Actor = UserId,
+        Detail = strcat(OfficeWorkload, ": ", Operation)),
+    (AzureDiagnostics
+    | where TimeGenerated >= ago(lookback) and ResourceProvider == "MICROSOFT.KEYVAULT"
+    | extend CallerIP = tostring(column_ifexists("CallerIPAddress", ""))
+    | where CallerIP in (IoC_IPs)
+    | project
+        TimeGenerated,
+        Source = "Key Vault",
+        IP = CallerIP,
+        Actor = tostring(column_ifexists("identity_claim_appid_g", "")),
+        Detail = strcat(OperationName, ", ", ResultSignature))
+| order by TimeGenerated asc

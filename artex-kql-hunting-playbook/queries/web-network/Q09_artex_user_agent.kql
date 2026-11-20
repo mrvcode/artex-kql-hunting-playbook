@@ -1,0 +1,36 @@
+// Q09: User-Agent de ARTEX en logs web, WAF y proxy
+// MITRE ATT&CK: T1595, T1588.002
+// Prefijos documentados: artex-enrich/ y artex-selfupdate (Netskope Threat Labs, 18 nov 2026).
+
+let lookback = 14d;
+union isfuzzy=true
+    (W3CIISLog
+    | where TimeGenerated >= ago(lookback) and csUserAgent has "artex"
+    | project
+        TimeGenerated,
+        Source = "IIS",
+        Client = cIP,
+        Uri = csUriStem,
+        UA = csUserAgent,
+        Status = tostring(scStatus)),
+    (AzureDiagnostics
+    | where TimeGenerated >= ago(lookback) and Category == "ApplicationGatewayAccessLog"
+    | extend UA = tostring(column_ifexists("userAgent_s", ""))
+    | where UA has "artex"
+    | project
+        TimeGenerated,
+        Source = "AppGateway",
+        Client = tostring(column_ifexists("clientIP_s", "")),
+        Uri = tostring(column_ifexists("requestUri_s", "")),
+        UA,
+        Status = tostring(column_ifexists("httpStatus_d", ""))),
+    (CommonSecurityLog
+    | where TimeGenerated >= ago(lookback) and RequestClientApplication has "artex"
+    | project
+        TimeGenerated,
+        Source = "CEF proxy/WAF",
+        Client = SourceIP,
+        Uri = RequestURL,
+        UA = RequestClientApplication,
+        Status = "")
+| order by TimeGenerated asc

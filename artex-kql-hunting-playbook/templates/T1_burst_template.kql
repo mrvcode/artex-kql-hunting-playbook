@@ -1,0 +1,28 @@
+// Plantilla T1: Plantilla de ráfaga reutilizable (función con argumento tabular)
+// Objetivo: Normalizar cada fuente de logs a 4 columnas comunes (TimeGenerated, Client, Resource, Failed)
+//           y aplicar una lógica unificada de detección de ráfagas.
+
+let BurstTemplate = (
+    T: (TimeGenerated: datetime, Client: string, Resource: string, Failed: bool),
+    window: timespan,
+    minEvents: long,
+    minResources: long
+) {
+    T
+    | summarize
+        Events = count(),
+        Resources = dcount(Resource),
+        Failures = countif(Failed)
+        by Client, bin(TimeGenerated, window)
+    | where Events >= minEvents and Resources >= minResources
+};
+let Web = W3CIISLog
+    | where TimeGenerated >= ago(1d)
+    | project TimeGenerated, Client = cIP, Resource = csUriStem, Failed = (scStatus >= 400);
+let Identity = AADServicePrincipalSignInLogs
+    | where TimeGenerated >= ago(1d)
+    | project TimeGenerated, Client = IPAddress, Resource = ResourceDisplayName, Failed = (ResultType != "0");
+union
+    (BurstTemplate(Web, 5m, 60, 25) | extend Layer = "web"),
+    (BurstTemplate(Identity, 15m, 20, 3) | extend Layer = "identity")
+| order by Events desc
