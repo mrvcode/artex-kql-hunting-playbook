@@ -1,0 +1,21 @@
+// Q08: Descargas masivas desde Storage Blob por orígenes externos
+// MITRE ATT&CK: T1530
+// Nota: CallerIpAddress suele incluir puerto en IPv4 (ip:puerto). Adapta si manejas IPv6.
+
+let lookback = 24h;
+let minDownloads = 200;
+let minGB = 1.0;
+let KnownRanges = dynamic(["203.0.113.0/24"]); // Sustituir por rangos propios
+StorageBlobLogs
+| where TimeGenerated >= ago(lookback)
+| where OperationName == "GetBlob" and StatusText == "Success"
+| extend ClientIP = tostring(split(CallerIpAddress, ":")[0])
+| where not(coalesce(ipv4_is_in_any_range(ClientIP, KnownRanges), false))
+| summarize
+    Downloads = count(),
+    Blobs = dcount(Uri),
+    GB = round(sum(ResponseBodySize) / 1073741824.0, 2),
+    Auth = make_set(AuthenticationType, 4)
+    by ClientIP, AccountName, bin(TimeGenerated, 1h)
+| where Downloads >= minDownloads or GB >= minGB
+| order by GB desc

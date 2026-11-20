@@ -1,0 +1,16 @@
+// Plantilla T2: Calibración de umbrales con tráfico propio (baseline)
+// Objetivo: Calcular percentiles (p50, p95, p99) de peticiones y rutas distintas por IP
+//           en ventanas de 5 minutos durante 14 días para fijar umbrales realistas.
+
+W3CIISLog
+| where TimeGenerated >= ago(14d)
+| summarize
+    Req = count(),
+    Uris = dcount(csUriStem)
+    by cIP, bin(TimeGenerated, 5m)
+| summarize
+    ReqP50 = percentile(Req, 50),
+    ReqP95 = percentile(Req, 95),
+    ReqP99 = percentile(Req, 99),
+    UrisP95 = percentile(Uris, 95),
+    UrisP99 = percentile(Uris, 99)

@@ -1,0 +1,23 @@
+// Q14: Indicadores de inclusión local de archivos (LFI) y sesiones PHP (PHP2Shell)
+// MITRE ATT&CK: T1190
+
+let lookback = 24h;
+let minHits = 3;
+let LfiRegex = @"(\.\./|\.\.%2f|%2e%2e%2f|php://|/etc/passwd|/proc/self|/var/lib/php/sess|sess_[a-z0-9]{10,})";
+AzureDiagnostics
+| where TimeGenerated >= ago(lookback)
+| where ResourceProvider == "MICROSOFT.NETWORK" and Category == "ApplicationGatewayAccessLog"
+| extend
+    Uri = tolower(tostring(column_ifexists("requestUri_s", ""))),
+    ClientIP = tostring(column_ifexists("clientIP_s", "")),
+    Status = toint(column_ifexists("httpStatus_d", 0)),
+    UA = tostring(column_ifexists("userAgent_s", ""))
+| where Uri matches regex LfiRegex
+| summarize
+    Hits = count(),
+    Ok200 = countif(Status == 200),
+    Sample = make_set(Uri, 5),
+    UAs = make_set(UA, 3)
+    by ClientIP, bin(TimeGenerated, 15m)
+| where Hits >= minHits
+| order by Hits desc

@@ -1,0 +1,21 @@
+// Q06: Run Command en máquinas virtuales ejecutado por un service principal (Caller GUID)
+// MITRE ATT&CK: T1651
+
+let lookback = 7d;
+AzureActivity
+| where TimeGenerated >= ago(lookback)
+| where OperationNameValue in~ (
+    "MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND/ACTION",
+    "MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMANDS/WRITE"
+)
+| where ActivityStatusValue in ("Start", "Accept", "Success")
+| where Caller matches regex @"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$"
+| project
+    TimeGenerated,
+    Caller,
+    CallerIpAddress,
+    SubscriptionId,
+    ResourceGroup,
+    ResourceId,
+    ActivityStatusValue
+| order by TimeGenerated desc

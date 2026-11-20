@@ -1,0 +1,12 @@
+// Plantilla T3: Patrón de allowlist (Watchlist de Sentinel + rangos propios)
+// Objetivo: Excluir escáneres autorizados y salidas corporativas conocidas antes de alertar.
+// Prerrequisito: Watchlist 'KnownScanners' con SearchKey conteniendo IPs autorizadas.
+
+let KnownScanners = toscalar(_GetWatchlist('KnownScanners') | summarize make_set(SearchKey));
+let KnownEgress = dynamic(["203.0.113.0/24", "198.51.100.0/24"]); // Sustituir por rangos propios
+W3CIISLog
+| where TimeGenerated >= ago(1d)
+| where cIP !in (KnownScanners)
+| where not(coalesce(ipv4_is_in_any_range(cIP, KnownEgress), false))
+| summarize Req = count() by cIP
+| order by Req desc

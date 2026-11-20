@@ -1,0 +1,8 @@
+// Q10: Cabecera HTTP X-ARTX-KEY (posible acceso a webshell)
+// MITRE ATT&CK: T1505.003
+// Nota de rendimiento: 'search' sobre múltiples tablas puede ser costoso en workspaces grandes.
+// En producción, acota únicamente a las tablas/columnas donde realmente registres cabeceras HTTP.
+
+search in (W3CIISLog, Syslog, CommonSecurityLog, AzureDiagnostics) "X-ARTX-KEY"
+| where TimeGenerated >= ago(14d)
+| take 200

@@ -1,0 +1,25 @@
+// Q12: Petición a ruta aleatoria inexistente (404) seguida de barrido de rutas
+// MITRE ATT&CK: T1595.002
+// Nota de coste: El self-join puede ser exigente en entornos de alto tráfico; mantén lookback acotado.
+
+let lookback = 24h;
+let follow = 10m;
+let minFollow = 20;
+let Canary = W3CIISLog
+    | where TimeGenerated >= ago(lookback) and scStatus == 404
+    | where csUriStem matches regex @"/[A-Za-z0-9]{12,}$" and not(csUriStem contains ".")
+    | project CanaryTime = TimeGenerated, cIP, CanaryUri = csUriStem;
+Canary
+| join kind=inner (
+    W3CIISLog
+    | where TimeGenerated >= ago(lookback)
+    | project TimeGenerated, cIP, csUriStem, scStatus
+) on cIP
+| where TimeGenerated between (CanaryTime .. (CanaryTime + follow))
+| summarize
+    Follow = dcount(csUriStem),
+    Errors = countif(scStatus >= 400),
+    Sample = make_set(csUriStem, 8)
+    by cIP, CanaryUri, CanaryTime
+| where Follow >= minFollow
+| order by CanaryTime desc
